@@ -16,6 +16,24 @@ elif config.DEVICE == 'pi':
                                        config.LED_FREQ_HZ, config.LED_DMA,
                                        config.LED_INVERT, config.BRIGHTNESS)
     strip.begin()
+elif config.DEVICE == 'apa102':
+    from driver import apa102
+    import signal
+    import sys
+    # Will turn all leds off when invoked.
+    def signal_handler(signal, frame):
+        strip.clear_strip()
+        strip.cleanup()
+        sys.exit(0)
+
+    # Create a listener that turns the leds off when the program terminates
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    strip = apa102.APA102(num_led=config.N_PIXELS, global_brightness=config.BRIGHTNESS, mosi=config.LED_MOSI_PIN, sclk=config.LED_SCLK_PIN, order=config.LED_COLOR_ORDER)
+    # Turn off all pixels (sometimes a few light up when the strip gets power)
+    strip.clear_strip()
+
 elif config.DEVICE == 'blinkstick':
     from blinkstick import blinkstick
     import signal
@@ -108,6 +126,27 @@ def _update_pi():
     _prev_pixels = np.copy(p)
     strip.show()
 
+def _update_apa102():
+    """Writes new LED values to the Raspberry Pi's LED strip"""
+    global pixels, _prev_pixels
+    # Truncate values and cast to integer
+    pixels = np.clip(pixels, 0, 255).astype(int)
+    # Optional gamma correction
+    p = _gamma[pixels] if config.SOFTWARE_GAMMA_CORRECTION else np.copy(pixels)
+    # Encode 24-bit LED values in 32 bit integers
+    r = np.left_shift(p[0][:].astype(int), 8)
+    g = np.left_shift(p[1][:].astype(int), 16)
+    b = p[2][:].astype(int)
+    rgb = np.bitwise_or(np.bitwise_or(r, g), b)
+    # Update the pixels
+    for i in range(config.N_PIXELS):
+        # Ignore pixels if they haven't changed (saves bandwidth)
+        if np.array_equal(p[:, i], _prev_pixels[:, i]):
+            continue
+        strip.set_pixel_rgb(i, rgb[i].item())
+    _prev_pixels = np.copy(p)
+    strip.show()
+
 def _update_blinkstick():
     """Writes new LED values to the Blinkstick.
         This function updates the LED strip with new values.
@@ -141,6 +180,8 @@ def update():
         _update_esp8266()
     elif config.DEVICE == 'pi':
         _update_pi()
+    elif config.DEVICE == 'apa102':
+        _update_apa102()
     elif config.DEVICE == 'blinkstick':
         _update_blinkstick()
     else:
