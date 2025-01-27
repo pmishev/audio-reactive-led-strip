@@ -17,7 +17,7 @@ elif config.DEVICE == 'pi':
                                        config.LED_INVERT, config.BRIGHTNESS)
     strip.begin()
 elif config.DEVICE == 'apa102':
-    from driver import apa102
+    from apa102_pi.driver import apa102
     import signal
     import sys
     # Will turn all leds off when invoked.
